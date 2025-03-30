@@ -13,7 +13,6 @@ const wcApi = axios.create({
     password: process.env.WC_CONSUMER_SECRET,
   },
 });
-console.log("WC_API_URL:", process.env.WC_API_URL);
 // GET /api/woocommerce/products
 router.get("/products", async (req, res) => {
     try {

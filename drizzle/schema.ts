@@ -5,6 +5,7 @@ import {
     numeric,
     timestamp,
     integer, // ✅ נוסיף את זה
+    varchar,
   } from "drizzle-orm/pg-core";
   
   export const productsRaw = pgTable("products_raw", {
@@ -68,6 +69,7 @@ import {
     
       category: text("category"),
       sku: text("sku"),
+      woo_id: integer("woo_id"),
       shape: text("shape"),
       weight: numeric("weight"),
       color: text("color"),
@@ -106,6 +108,7 @@ import {
       certificateImageJpg: text("certificate_image_jpg"),
       origin: text("origin"),
       tradeShow: text("trade_show"),
+      status: varchar("status", { length: 255 }),
     
       uploadedAt: timestamp("uploaded_at").defaultNow(),
     });

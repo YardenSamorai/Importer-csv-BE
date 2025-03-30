@@ -1,4 +1,4 @@
-import { pgTable, serial, text, numeric, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, numeric, timestamp, integer, varchar } from "drizzle-orm/pg-core";
 
 export const productsRaw = pgTable("products_raw", {
   id: serial("id").primaryKey(),
@@ -56,6 +56,7 @@ export const uploadLogs = pgTable("upload_logs", {
     id: serial("id").primaryKey(),
   
     category: text("category"),
+    woo_id: integer("woo_id"),
     sku: text("sku"),
     shape: text("shape"),
     weight: numeric("weight"),
@@ -95,6 +96,7 @@ export const uploadLogs = pgTable("upload_logs", {
     certificateImageJpg: text("certificate_image_jpg"),
     origin: text("origin"),
     tradeShow: text("trade_show"),
+    status: varchar("status", { length: 255 }),
   
     uploadedAt: timestamp("uploaded_at").defaultNow(),
   });

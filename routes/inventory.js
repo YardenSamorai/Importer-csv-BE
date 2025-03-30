@@ -1,6 +1,7 @@
 import express from "express";
 import { db } from "../drizzle/db.js";
 import { productsInventory } from "../drizzle/schema.js";
+import { eq } from "drizzle-orm";
 
 const router = express.Router();
 
@@ -35,11 +36,15 @@ router.get("/", async (req, res) => {
 // ✅ מחזיר רק את כמות המוצרים
 router.get("/count", async (req, res) => {
   try {
-    const result = await db.select().from(productsInventory);
-    res.json({ count: result.length });
+    const countResult = await db
+      .select()
+      .from(productsInventory)
+      .where(eq(productsInventory.status, "publish"));
+
+    res.json({ count: countResult.length });
   } catch (err) {
-    console.error("❌ Error fetching product count:", err);
-    res.status(500).json({ error: "Failed to fetch product count" });
+    console.error("❌ Error fetching inventory count:", err);
+    res.status(500).json({ error: "Failed to fetch count" });
   }
 });
 

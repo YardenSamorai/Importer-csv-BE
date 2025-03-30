@@ -125,6 +125,8 @@ router.get("/logs/today/count", async (req, res) => {
   }
 });
 
+// בודק אילו מוצרים נמצאים בקובץ CSV ואילו באתר בפועל (products_inventory)
+// משווה רק מוצרים באוויר (status === 'publish') ומתעלם ממוצרים מקטגוריית "jewelry"
 router.post("/compare", async (req, res) => {
   try {
     const [dbInventory, csvRaw] = await Promise.all([
@@ -132,27 +134,38 @@ router.post("/compare", async (req, res) => {
       db.select().from(productsRaw),
     ]);
 
-    // פונקציה לבדיקת קטגוריית Jewelry
+    // 🔍 תנאים לסינון
     const isJewelry = (item) =>
       item.category?.toLowerCase().trim() === "jewelry";
 
-    // סינון המוצרים מהקטגוריה Jewelry
-    const dbFiltered = dbInventory.filter((p) => !isJewelry(p));
+    const isPublished = (item) =>
+      item.status?.toLowerCase().trim() === "publish";
+
+    // ✂️ סינון
+    const dbFiltered = dbInventory.filter((p) => isPublished(p) && !isJewelry(p));
     const csvFiltered = csvRaw.filter((p) => !isJewelry(p));
 
-    const existingSKUs = new Set(dbFiltered.map(p => p.sku));
-    const newSKUs = new Set(csvFiltered.map(p => p.sku));
+    const skippedDueToStatus = dbInventory.length - dbFiltered.length;
+    const skippedDueToJewelry = dbInventory.filter((p) => isJewelry(p)).length;
 
-    const added = csvFiltered.filter(p => !existingSKUs.has(p.sku));
-    const removed = dbFiltered.filter(p => !newSKUs.has(p.sku));
-    const existing = csvFiltered.filter(p => existingSKUs.has(p.sku));
+    console.log(`📊 Total in DB: ${dbInventory.length}`);
+    console.log(`✅ Compared: ${dbFiltered.length}`);
+    console.log(`🛑 Skipped ${skippedDueToStatus} due to status != publish`);
+    console.log(`🛑 Skipped ${skippedDueToJewelry} due to category = jewelry`);
+
+    const existingSKUs = new Set(dbFiltered.map((p) => p.sku));
+    const newSKUs = new Set(csvFiltered.map((p) => p.sku));
+
+    const added = csvFiltered.filter((p) => !existingSKUs.has(p.sku));
+    const removed = dbFiltered.filter((p) => !newSKUs.has(p.sku));
+    const existing = csvFiltered.filter((p) => existingSKUs.has(p.sku));
 
     const result = {
       addedCount: added.length,
       removedCount: removed.length,
       existingCount: existing.length,
-      addedSKUs: added.map(p => p.sku),
-      removedSKUs: removed.map(p => p.sku),
+      addedSKUs: added.map((p) => p.sku),
+      removedSKUs: removed.map((p) => p.sku),
     };
 
     res.json(result);
@@ -161,5 +174,4 @@ router.post("/compare", async (req, res) => {
     res.status(500).json({ error: "Comparison failed" });
   }
 });
-
 export default router;

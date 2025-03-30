@@ -1,10 +1,10 @@
-// utils/syncInventory.js
-
 import "dotenv/config";
 import axios from "axios";
 import { db } from "../drizzle/db.js";
 import { productsInventory } from "../drizzle/schema.js";
 
+// פונקציה שמושכת את כל המוצרים מה-WooCommerce (כולל Drafts וכולל תכשיטים) ומשמשת את syncInventory.
+// לא שומרת נתונים במסד – רק מחזירה אותם.
 const fetchAllWooProducts = async () => {
   let page = 1;
   const perPage = 100;
@@ -19,7 +19,11 @@ const fetchAllWooProducts = async () => {
         username: process.env.WC_CONSUMER_KEY,
         password: process.env.WC_CONSUMER_SECRET,
       },
-      params: { per_page: perPage, page },
+      params: {
+        per_page: perPage,
+        page,
+        status: "any", // נביא את כל המוצרים כולל drafts כדי לשמור אותם בבסיס הנתונים
+      },
     });
 
     const products = res.data;
@@ -32,15 +36,22 @@ const fetchAllWooProducts = async () => {
     }
   }
 
-  console.log(`✅ Fetched ${allProducts.length} products`);
+  console.log(`✅ Fetched ${allProducts.length} products (including drafts & jewelry)`);
   return allProducts;
 };
 
+// פונקציה ראשית שמסנכרנת את המלאי בין WooCommerce לבין productsInventory בטבלה.
+// משתמשת ב-fetchAllWooProducts כדי למשוך את המידע, ומכניסה אותו למסד הנתונים.
 const syncInventory = async () => {
   try {
     const products = await fetchAllWooProducts();
 
-    const formatted = products.map((p) => {
+    console.log("🔍 First 3 WooCommerce products:");
+    products.slice(0, 3).forEach((p, i) => {
+      console.log(`  #${i + 1} ID: ${p.id} | SKU: ${p.sku} | Name: ${p.name}`);
+    });
+
+    const formatted = products.map((p, index) => {
       const attrMap = {};
 
       p.attributes?.forEach((attr) => {
@@ -111,7 +122,8 @@ const syncInventory = async () => {
         if (key === "_certificate_image_jpg") attrMap.certificateImageJpg = value;
       });
 
-      return {
+      const formattedProduct = {
+        woo_id: p.id,
         sku: p.sku || null,
         pricePerCarat: parseFloat(p.price) || null,
         image: p.images?.[0]?.src || null,
@@ -120,12 +132,30 @@ const syncInventory = async () => {
         type: p.type || null,
         homePage: p.permalink || null,
         branch: p.tags?.[0]?.name || null,
+        status: p.status || null,
         ...attrMap,
       };
+
+      if (index < 3) {
+        console.log(`🧪 Formatted product #${index + 1}:`, formattedProduct);
+      }
+
+      return formattedProduct;
     });
 
+    console.log("🧹 Deleting old inventory...");
     await db.delete(productsInventory);
-    await db.insert(productsInventory).values(formatted);
+
+    const chunkSize = 100;
+    for (let i = 0; i < formatted.length; i += chunkSize) {
+      const chunk = formatted.slice(i, i + chunkSize);
+      await db.insert(productsInventory).values(chunk);
+      console.log(`📦 Inserted products ${i + 1} to ${i + chunk.length}`);
+    }
+
+    const draftCount = formatted.filter(p => p.status !== "publish").length;
+    const jewelryCount = formatted.filter(p => p.category?.toLowerCase() === "jewelry").length;
+    console.log(`🛑 Skipped ${draftCount} draft products and ${jewelryCount} jewelry products (in future comparisons)`);
 
     console.log("✅ Inventory synced to database");
   } catch (error) {

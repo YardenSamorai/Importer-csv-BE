@@ -12,6 +12,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@neondatabase/serverless": "^1.0.0",
     "@woocommerce/woocommerce-rest-api": "^1.0.1",
     "axios": "^1.8.4",
     "cors": "^2.8.5",
