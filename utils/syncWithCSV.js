@@ -3,10 +3,31 @@ import { productsRaw, productsInventory } from "../drizzle/schema.js";
 import createProduct from "./createProduct.js";
 import axios from "axios";
 
-// פונקציות למחיקה ועדכון
+const CATEGORY_MAP = {
+  diamond: 16,
+  emerald: 17,
+  fancy: 18,
+  sapphire: 36,
+  ruby: 36,
+  spinel: 36,
+  "garnet o": 36,
+  "tourmaline o": 36,
+  "tsavorite o": 36,
+  "aquamarine": 36,
+  "morganite o": 36,
+  "kunzite o": 36,
+  "chrome diopside o": 36,
+  "amethyst o": 36,
+  "tanzanite o": 36,
+  gemstone: 36,
+  jewelry: 64,
+  uncategorized: 15,
+};
+
+// 🧹 מחיקת מוצר מהאתר
 const deleteProduct = async (wooId) => {
   try {
-    const res = await axios.delete(`${process.env.WC_API_URL}/products/${wooId}`, {
+    await axios.delete(`${process.env.WC_API_URL}/products/${wooId}`, {
       auth: {
         username: process.env.WC_CONSUMER_KEY,
         password: process.env.WC_CONSUMER_SECRET,
@@ -19,22 +40,33 @@ const deleteProduct = async (wooId) => {
   }
 };
 
-const updateProduct = async (wooId, totalPrice) => {
+// ✏️ עדכון מחיר וקטגוריה
+const updateProduct = async (wooId, totalPrice, categoryName) => {
   try {
-    const res = await axios.put(`${process.env.WC_API_URL}/products/${wooId}`, {
-      regular_price: totalPrice.toString(),
-    }, {
-      auth: {
-        username: process.env.WC_CONSUMER_KEY,
-        password: process.env.WC_CONSUMER_SECRET,
+    const categoryId = CATEGORY_MAP[categoryName?.toLowerCase()] || CATEGORY_MAP.uncategorized;
+    console.log({categoryName:categoryName?.toLowerCase(),id: CATEGORY_MAP[categoryName?.toLowerCase()]});
+
+    await axios.put(
+      `${process.env.WC_API_URL}/products/${wooId}`,
+      {
+        regular_price: totalPrice.toString(),
+        categories: [{ id: categoryId }],
       },
-    });
-    console.log(`✏️ Updated price for WooCommerce product ID: ${wooId}`);
+      {
+        auth: {
+          username: process.env.WC_CONSUMER_KEY,
+          password: process.env.WC_CONSUMER_SECRET,
+        },
+      }
+    );
+
+    console.log(`✏️ Updated WooCommerce product ID ${wooId} | Price: ${totalPrice} | Category: ${categoryName}`);
   } catch (err) {
     console.error(`❌ Failed to update product ${wooId}:`, err.response?.data || err.message);
   }
 };
 
+// 🔁 סנכרון בין productsRaw לבין המלאי באתר
 const syncWithCSV = async () => {
   try {
     console.log("🔄 Starting full sync with CSV...");
@@ -44,8 +76,8 @@ const syncWithCSV = async () => {
       db.select().from(productsInventory),
     ]);
 
-    const csvMap = new Map(csvProducts.map(p => [p.sku, p]));
-    const wooMap = new Map(wooProducts.map(p => [p.sku, p]));
+    const csvMap = new Map(csvProducts.map((p) => [p.sku, p]));
+    const wooMap = new Map(wooProducts.map((p) => [p.sku, p]));
 
     const toAdd = [];
     const toDelete = [];
@@ -53,16 +85,38 @@ const syncWithCSV = async () => {
 
     for (const [sku, csvItem] of csvMap.entries()) {
       if (!wooMap.has(sku)) {
+        console.log("🔄 wooMap not having addind sku ${sku}...",sku);
+
+        console.log({csvItem});
+
         toAdd.push(csvItem);
       } else {
+        console.log("🔄 wooMap  having update/delete sku ${sku}...",sku);
+
+        console.log({csvItem});
         const wooItem = wooMap.get(sku);
+        console.log("🔄 wooItem  wooItem ${sku}...");
+
+        console.log({wooItem});
         const csvPrice = parseFloat(csvItem.totalPrice);
         const wooPrice = parseFloat(wooItem.totalPrice);
 
-        if (!isNaN(csvPrice) && csvPrice !== wooPrice) {
+        const csvCategory = csvItem.category?.toLowerCase() || "uncategorized";
+        const wooCategory = wooItem.category?.toLowerCase() || "uncategorized";
+
+        const priceChanged = !isNaN(csvPrice) && csvPrice !== wooPrice;
+        const categoryChanged = csvCategory !== wooCategory;
+        console.log({
+          wooId: wooItem.woo_id,
+          newPrice: csvPrice,
+          newCategory: csvCategory,
+          sku,
+        });
+        if (priceChanged || categoryChanged) {
           toUpdate.push({
             wooId: wooItem.woo_id,
             newPrice: csvPrice,
+            newCategory: csvCategory,
             sku,
           });
         }
@@ -89,6 +143,8 @@ const syncWithCSV = async () => {
     console.log(`✏️ ${toUpdate.length} to update`);
 
     for (const item of toAdd) {
+      console.log("toAdd",{item});
+
       await createProduct(item);
     }
 
@@ -97,7 +153,9 @@ const syncWithCSV = async () => {
     }
 
     for (const item of toUpdate) {
-      await updateProduct(item.wooId, item.newPrice);
+      console.log("toAdd",{item});
+
+      await updateProduct(item.wooId, item.newPrice, item.newCategory);
     }
 
     console.log("✅ Full sync complete!");

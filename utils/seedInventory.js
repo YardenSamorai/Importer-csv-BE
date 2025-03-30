@@ -22,11 +22,13 @@ const fetchAllWooProducts = async () => {
       params: {
         per_page: perPage,
         page,
+        _embed: true,
         status: "any", // נביא את כל המוצרים כולל drafts כדי לשמור אותם בבסיס הנתונים
       },
     });
 
     const products = res.data;
+    
     allProducts = allProducts.concat(products);
 
     if (products.length < perPage) {
@@ -51,6 +53,7 @@ const syncInventory = async () => {
       console.log(`  #${i + 1} ID: ${p.id} | SKU: ${p.sku} | Name: ${p.name}`);
     });
 
+    console.log("🔍 Sample product:", products[0]);
     const formatted = products.map((p, index) => {
       const attrMap = {};
 
@@ -145,17 +148,18 @@ const syncInventory = async () => {
 
     console.log("🧹 Deleting old inventory...");
     await db.delete(productsInventory);
+    await db.insert(productsInventory).values(formatted);
 
-    const chunkSize = 100;
-    for (let i = 0; i < formatted.length; i += chunkSize) {
-      const chunk = formatted.slice(i, i + chunkSize);
-      await db.insert(productsInventory).values(chunk);
-      console.log(`📦 Inserted products ${i + 1} to ${i + chunk.length}`);
-    }
+    // const chunkSize = 100;
+    // for (let i = 0; i < formatted.length; i += chunkSize) {
+    //   const chunk = formatted.slice(i, i + chunkSize);
+    //   await db.insert(productsInventory).values(chunk);
+    //   console.log(`📦 Inserted products ${i + 1} to ${i + chunk.length}`);
+    // }
 
-    const draftCount = formatted.filter(p => p.status !== "publish").length;
-    const jewelryCount = formatted.filter(p => p.category?.toLowerCase() === "jewelry").length;
-    console.log(`🛑 Skipped ${draftCount} draft products and ${jewelryCount} jewelry products (in future comparisons)`);
+    // const draftCount = formatted.filter(p => p.status !== "publish").length;
+    // const jewelryCount = formatted.filter(p => p.category?.toLowerCase() === "jewelry").length;
+    // console.log(`🛑 Skipped ${draftCount} draft products and ${jewelryCount} jewelry products (in future comparisons)`);
 
     console.log("✅ Inventory synced to database");
   } catch (error) {
